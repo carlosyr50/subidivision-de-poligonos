@@ -862,17 +862,27 @@ function resize() {
   const r = $('#main').getBoundingClientRect();
   DPR = window.devicePixelRatio || 1; W = Math.max(1, r.width); H = Math.max(1, r.height);
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  if (pendingExtents && W >= 120 && H >= 120) zoomExtents(pendingExtents === 'all' ? null : pendingExtents);
+  else if (S.doc.polys.length && W >= 120 && H >= 120 && !viewShowsSomething()) zoomExtents();
   render();
+}
+function viewShowsSomething() {
+  for (const p of S.doc.polys) for (const q of p.pts) { const s = w2s(q); if (s[0] >= 0 && s[0] <= W && s[1] >= 0 && s[1] <= H) return true; }
+  return false;
 }
 const w2s = p => [(p[0] - S.view.cx) * S.view.scale + W / 2, H / 2 - (p[1] - S.view.cy) * S.view.scale];
 const s2w = (x, y) => [(x - W / 2) / S.view.scale + S.view.cx, (H / 2 - y) / S.view.scale + S.view.cy];
+let pendingExtents = null;
 function zoomExtents(list) {
   const polys = list || S.doc.polys;
-  if (!polys.length || W < 2) return;
+  if (!polys.length) return;
+  // el visor puede abrir la página con el lienzo aún sin tamaño: se encuadra cuando lo tenga
+  if (W < 120 || H < 120) { pendingExtents = list || 'all'; return; }
+  pendingExtents = null;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of polys) for (const q of p.pts) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
   const dx = Math.max(x1 - x0, 1), dy = Math.max(y1 - y0, 1);
-  S.view.scale = Math.min((W - 80) / dx, (H - 80) / dy);
+  S.view.scale = Math.max(1e-3, Math.min((W - 80) / dx, (H - 80) / dy));
   S.view.cx = (x0 + x1) / 2; S.view.cy = (y0 + y1) / 2;
   save(); requestRender(); refreshPointer();
 }
@@ -2235,7 +2245,7 @@ function init() {
   }
   applyTheme();
   resize();
-  if (!S.view.restored) zoomExtents();
+  if (!S.view.restored || !viewShowsSomething()) zoomExtents();
   setTool(SelectTool);
   msg(ok ? 'Trabajo recuperado de este navegador.' : 'Ejemplo cargado: ' + (S.doc.meta.archivo || '') + '. Haga clic en un predio y escriba SUB para subdividir.', 'ok');
 }
